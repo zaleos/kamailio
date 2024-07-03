@@ -220,6 +220,7 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 	char *end;
 	char *pass;
 	int found_user;
+	int found_host;
 	int error_headers;
 	uint32_t scheme;
 	uri_type backup_urit;
@@ -271,28 +272,33 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 	} else                                                 \
 		goto error_bad_char
 
-#define check_host_end         \
-	case ':':                  \
-		/* found the host */   \
-		uri->host.s = s;       \
-		uri->host.len = p - s; \
-		state = URI_PORT;      \
-		s = p + 1;             \
-		break;                 \
-	case ';':                  \
-		uri->host.s = s;       \
-		uri->host.len = p - s; \
-		state = URI_PARAM;     \
-		s = p + 1;             \
-		break;                 \
-	case '?':                  \
-		uri->host.s = s;       \
-		uri->host.len = p - s; \
-		state = URI_HEADERS;   \
-		s = p + 1;             \
-		break;                 \
-	case '&':                  \
-	case '@':                  \
+#define check_host_end         					\
+	case ':':                  					\
+		/* found the host */   					\
+		if(scheme != URN_SCH || !found_host){	\
+			uri->host.s = s;       				\
+			found_host = 1;						\
+		}										\
+		uri->host.len = p - s; 					\
+		if(scheme != URN_SCH ){					\
+			state = URI_PORT;      				\
+		}										\
+		s = p + 1;             					\
+		break;                 					\
+	case ';':                  					\
+		uri->host.s = s;       					\
+		uri->host.len = p - s; 					\
+		state = URI_PARAM;     					\
+		s = p + 1;             					\
+		break;                 					\
+	case '?':                  					\
+		uri->host.s = s;       					\
+		uri->host.len = p - s; 					\
+		state = URI_HEADERS;   					\
+		s = p + 1;             					\
+		break;                 					\
+	case '&':                  					\
+	case '@':                  					\
 		goto error_bad_char
 
 
@@ -479,6 +485,7 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 	end = buf + len;
 	p = buf + 4;
 	found_user = 0;
+	found_host = 0;
 	error_headers = 0;
 	b = v = 0;
 	param = param_val = 0;
@@ -530,7 +537,7 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 					case '@': /* error no user part, or
 								* be forgiving and accept it ? */
 					default:
-						state = URI_USER;
+						state = (scheme == URN_SCH) ? URI_HOST : URI_USER;
 				}
 				break;
 			case URI_USER:
