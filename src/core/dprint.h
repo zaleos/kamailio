@@ -360,7 +360,7 @@ void log_prefix_init(void);
 							   : (((level) > L_DBG) ? L_DBG : level);         \
 			DPRINT_CRIT_ENTER;                                                \
 			if(_ksr_slog_func) { /* structured logging */                     \
-				ksr_logdata_t __kld = {0,0,0,0,0,0,0,0,0,0};                  \
+				ksr_logdata_t __kld = {0};					                  \
 				__kld.v_facility =                                            \
 						LOG2SYSLOG_LEVEL(__llevel)                            \
 						| (((facility) != DEFAULT_FACILITY)                   \
