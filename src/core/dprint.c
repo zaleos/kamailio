@@ -74,6 +74,7 @@ void km_default_custom_log_func(int syslog_level, const char *mod_name, const ch
     va_start (args, fmt);
     vsyslog(syslog_level, custom_fmt, args);
     va_end (args);
+	free(custom_fmt);
 }
 
 #ifndef NO_SIG_DEBUG
