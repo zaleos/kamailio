@@ -250,6 +250,7 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 			state = URI_PORT;     					\
 		}											\
 		s = p + 1;             						\
+		exit(1);									\
 		break;                 						\
 	case ';':                  						\
 		uri->host.s = s;       						\
