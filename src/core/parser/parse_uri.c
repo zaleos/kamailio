@@ -185,8 +185,8 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 	register char *p;
 	char *end;
 	char *pass;
+	char* f_component;
 	int found_user;
-	int found_host;
 	int error_headers;
 	uint32_t scheme;
 	uri_type backup_urit;
@@ -259,6 +259,11 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 		uri->host.len = p - s;                     \
 		state = URI_HEADERS;                       \
 		s = p + 1;                                 \
+		break;                                     \
+	case '#':                                      \
+		uri->host.s = s;                           \
+		uri->host.len = p - s;                     \
+		f_component = p;                           \
 		break;                                     \
 	case '&':                                      \
 	case '@':                                      \
@@ -448,7 +453,7 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 	end = buf + len;
 	p = buf + 4;
 	found_user = 0;
-	found_host = 0;
+	f_component = end;
 	error_headers = 0;
 	b = v = 0;
 	param = param_val = 0;
@@ -1111,7 +1116,7 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 		case URI_HOST_P:
 		case URI_HOST6_END:
 			uri->host.s = s;
-			uri->host.len = p - s;
+			uri->host.len = f_component - s;
 			break;
 		case URI_HOST:	  /* error: null host */
 		case URI_HOST6_P: /* error: unterminated ipv6 reference*/
