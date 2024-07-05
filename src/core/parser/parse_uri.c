@@ -59,40 +59,6 @@ int uri_host_char_allowed(char c)
 	return 0;
 }
 
-int check_emergency_urn(char *buf, int len, struct sip_uri* uri)
-{
-    char* emergency_prefix = "emergency:";
-
-   register char* buf_position;
-   char* buf_end;
-
-    char* user;
-    char* host;
-
-    if (len < 15) {
-        return 0;
-    }
-
-    // Skip the "urn:" schema (already checked)
-    buf_position = buf + 4;
-    buf_end = buf + len;
-    // If "urn:" schema is NOT followed by "emergency:" exit and return to standard Kamailio URI parsing logic
-    if (strncmp(emergency_prefix, buf_position, 9) != 0) {
-        return 0;
-    }
-    LM_DBG("Found \"urn:emergency:\" URN: %.*s\n", len, buf);
-    user = buf + 4;                 // Skip "urn:"
-    host = user + 10;               // Skip "urn:emergency:"
-    uri->user.s = user;             // This is always "emergency"
-    uri->user.len = 9;              // Length of "emergency"
-    uri->host.s = host;             // This is "service:..."
-    uri->host.len = buf_end - host; // Length of the rest of the string
-    LM_DBG("User: %.*s\n", uri->user.len, uri->user.s);
-    LM_DBG("Host: %.*s\n", uri->host.len, uri->host.s);
-
-    return 1;
-}
-
 /* buf= pointer to beginning of uri (sip:x@foo.bar:5060;a=b?h=i)
  * len= len of uri
  * returns: fills uri & returns <0 on error or 0 if ok
@@ -513,9 +479,6 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 		uri->type = TEL_URI_T;
 	} else if(scheme == URN_SCH) {
 		uri->type = URN_URI_T;
-		if (check_emergency_urn(buf, len, uri)){
-			return 0;
-		}
 	} else
 		goto error_bad_uri;
 
