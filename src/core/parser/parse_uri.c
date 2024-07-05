@@ -238,33 +238,30 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 	} else                                                 \
 		goto error_bad_char
 
-#define check_host_end         						\
-	case ':':                  						\
-		/* found the host */  						\
-		if(scheme != URN_SCH || found_host == 0){	\
-			uri->host.s = s;						\
-			found_host = 1;							\
-		}											\
-		uri->host.len = p - uri->host.s; 			\
-		if(scheme != URN_SCH){						\
-			state = URI_PORT;     					\
-			s = p + 1;             					\
-		}											\
-		break;                 						\
-	case ';':                  						\
-		uri->host.s = s;       						\
-		uri->host.len = p - s; 						\
-		state = URI_PARAM;     						\
-		s = p + 1;             						\
-		break;                 						\
-	case '?':                  						\
-		uri->host.s = s;       						\
-		uri->host.len = p - s; 						\
-		state = URI_HEADERS;   						\
-		s = p + 1;             						\
-		break;                 						\
-	case '&':                  						\
-	case '@':                  						\
+#define check_host_end                             \
+	case ':':                                      \
+		/* found the host */                       \
+		if(scheme != URN_SCH) {                    \
+			uri->host.s = s;                       \
+			uri->host.len = p - s;                 \
+			state = URI_PORT;                      \
+			s = p + 1;                             \
+		}                                          \
+		break;                                     \
+	case ';':                                      \
+		uri->host.s = s;                           \
+		uri->host.len = p - s;                     \
+		state = URI_PARAM;                         \
+		s = p + 1;                                 \
+		break;                                     \
+	case '?':                                      \
+		uri->host.s = s;                           \
+		uri->host.len = p - s;                     \
+		state = URI_HEADERS;                       \
+		s = p + 1;                                 \
+		break;                                     \
+	case '&':                                      \
+	case '@':                                      \
 		goto error_bad_char
 
 
