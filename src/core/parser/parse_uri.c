@@ -240,14 +240,14 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 
 #define check_host_end         						\
 	case ':':                  						\
-		/* found the host */   						\
-		if(scheme != URN_SCH || found_host == 0) {	\
-			uri->host.s = s;       					\
+		/* found the host */  						\
+		if(scheme != URN_SCH || found_host == 0){	\
+			uri->host.s = s;						\
 			found_host = 1;							\
 		}											\
-		uri->host.len = p - s; 						\
-		if(scheme != URN_SCH ){						\
-			state = URI_PORT;      					\
+		uri->host.len = p - uri->host.s; 			\
+		if(scheme != URN_SCH){						\
+			state = URI_PORT;     					\
 		}											\
 		s = p + 1;             						\
 		break;                 						\
