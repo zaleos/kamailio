@@ -248,8 +248,8 @@ int parse_uri(char *buf, int len, struct sip_uri *uri)
 		uri->host.len = p - uri->host.s; 			\
 		if(scheme != URN_SCH){						\
 			state = URI_PORT;     					\
+			s = p + 1;             					\
 		}											\
-		s = p + 1;             						\
 		break;                 						\
 	case ';':                  						\
 		uri->host.s = s;       						\
