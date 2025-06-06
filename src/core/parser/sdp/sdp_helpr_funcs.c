@@ -330,12 +330,9 @@ int extract_candidate(str *body, sdp_stream_cell_t *stream)
 
 	fl = space - start;
 
-	start = space + 1;
 	len = len - (space - start + 1);
-	if(start + len > body->s + body->len) {
-		LM_ERR("no component in `a=candidate'\n");
-		return -1;
-	}
+	start = space + 1;
+
 	space = memchr(start, 32, len);
 	if(space == NULL) {
 		LM_ERR("no component in `a=candidate'\n");

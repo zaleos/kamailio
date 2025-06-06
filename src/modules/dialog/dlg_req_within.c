@@ -425,10 +425,9 @@ static inline int send_bye(
 		goto err;
 	}
 
-	/* safety bump of cseq if prack was involved in call setup */
-	if(cell->iflags & DLG_IFLAG_PRACK) {
-		dialog_info->loc_seq.value += 80;
-	}
+	/* safety bump of cseq for callee side if prack was involved in call setup
+	 * or keepalives were sent to caller side */
+	dialog_info->loc_seq.value += 100;
 
 	LM_DBG("sending BYE to %s\n",
 			(dir == DLG_CALLER_LEG) ? "caller" : "callee");
@@ -494,7 +493,12 @@ dlg_t *build_dlg_t_early(
 		goto error;
 	}
 
-	if(msg == NULL || msg->first_line.type != SIP_REPLY) {
+	if(msg == NULL) {
+		LM_ERR("no sip message\n");
+		goto error;
+	}
+
+	if(msg->first_line.type != SIP_REPLY) {
 		if(!cell->t) {
 			LM_ERR("no transaction associated\n");
 			goto error;
@@ -784,10 +788,12 @@ int dlg_send_ka(dlg_cell_t *dlg, int dir)
 
 	/* tm increases cseq value, decrease it no to make it invalid
 	 * - dialog is ended on timeout (408) or C/L does not exist (481) */
-	if(di->loc_seq.value > 1)
+	if(di->loc_seq.value > 1) {
 		di->loc_seq.value -= 2;
-	else
+	} else {
 		di->loc_seq.value = 0;
+	}
+	di->loc_seq.is_set = 1;
 
 	LM_DBG("sending OPTIONS to %s\n",
 			(dir == DLG_CALLER_LEG) ? "caller" : "callee");

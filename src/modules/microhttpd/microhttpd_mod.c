@@ -373,7 +373,10 @@ static int ksr_mhttpd_send_reply(
 		return -1;
 	}
 	if(sctype->len > 0) {
-		MHD_add_response_header(response, "Content-Type", sctype->s);
+		if(MHD_add_response_header(response, "Content-Type", sctype->s)
+				== MHD_NO) {
+			LM_WARN("failed to add Content-Type header\n");
+		}
 	}
 	ret = MHD_queue_response(
 			_ksr_mhttpd_ctx.connection, (unsigned int)rcode, response);
@@ -500,9 +503,9 @@ static enum MHD_Result ksr_microhttpd_request(void *cls,
 				if(cstream->data.s != NULL) {
 					free(cstream->data.s);
 					free(cstream);
-					*ptr = NULL;
-					return MHD_NO;
 				}
+				*ptr = NULL;
+				return MHD_NO;
 			}
 			if(cstream->data.s != NULL) {
 				snprintf(buf, bsize, "%s%s", cstream->data.s, upload_data);

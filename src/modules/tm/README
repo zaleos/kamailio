@@ -164,8 +164,9 @@ Daniel-Constantin Mierla
               5.10. tm.reply
               5.11. tm.reply_callid
               5.12. tm.retransmit_reply
-              5.13. tm.clean
-              5.14. tm.stats
+              5.13. tm.retransmit_reply_callid
+              5.14. tm.clean
+              5.15. tm.stats
 
         6. Event Routes
 
@@ -305,9 +306,10 @@ Daniel-Constantin Mierla
    1.110. t_exists usage
    1.111. t_cell_append_branches usage
    1.112. Using “tm.retransmit_reply”
-   1.113. event_route[tm:branch-failure:id] usage
-   1.114. event_route[tm:local-request] usage
-   1.115. event_route[tm:local-response] usage
+   1.113. Using “tm.retransmit_reply_callid”
+   1.114. event_route[tm:branch-failure:id] usage
+   1.115. event_route[tm:local-request] usage
+   1.116. event_route[tm:local-response] usage
 
 Chapter 1. Admin Guide
 
@@ -452,8 +454,9 @@ Chapter 1. Admin Guide
         5.10. tm.reply
         5.11. tm.reply_callid
         5.12. tm.retransmit_reply
-        5.13. tm.clean
-        5.14. tm.stats
+        5.13. tm.retransmit_reply_callid
+        5.14. tm.clean
+        5.15. tm.stats
 
    6. Event Routes
 
@@ -497,8 +500,8 @@ Chapter 1. Admin Guide
    latency.
 
    From the admin's perspective, these are the major functions : t_relay,
-   t_relay_to_udp and t_relay_to_tcp. All of them setup transaction state,
-   absorb retransmissions from upstream, generate downstream
+   t_relay_to_udp and t_relay_to_tcp. All of them set up transaction
+   state, absorb retransmissions from upstream, generate downstream
    retransmissions and correlate replies to requests. t_relay forwards to
    current URI (be it original request's URI or a URI changed by some of
    URI-modifying functions, such as sethost). t_relay_to_udp and
@@ -688,7 +691,7 @@ failure_route["serial"]
    branch D upstream.
 
    If t_next_contact() returns a positive value then we have more new
-   branches to try and we need to setup the failure_route again and call
+   branches to try and we need to set up the failure_route again and call
    t_relay(). In our example the request will now be forwarded to branches
    B and C in parallel, because they were both added to the destination
    set by t_next_contacts() at the same time.
@@ -770,8 +773,12 @@ failure_route["serial"]
 
 3.1. fr_timer (integer)
 
-   Timer which hits if no final reply for a request or ACK for a negative
-   INVITE reply arrives (in milliseconds).
+   This timer is used for all SIP requests. It hits if no reply for an
+   request INVITE request or other request has been received within (F in
+   milliseconds). If a provisional reply is received for an INVITE (any
+   1xx), then the fr_inv_timer will be used instead. And if no replies (at
+   all) for an INVITE are received before fr_timer hits, the transaction
+   is terminated with a 408 in failure route.
 
    Default value is 30000 ms (30 seconds).
 
@@ -3198,8 +3205,9 @@ reply_route {
    5.10. tm.reply
    5.11. tm.reply_callid
    5.12. tm.retransmit_reply
-   5.13. tm.clean
-   5.14. tm.stats
+   5.13. tm.retransmit_reply_callid
+   5.14. tm.clean
+   5.15. tm.stats
 
 5.1.  tm.list
 
@@ -3306,14 +3314,27 @@ reply_route {
 kamcli rpc tm.retransmit_reply 1234:5678
 ...
 
-5.13.  tm.clean
+5.13.  tm.retransmit_reply_callid
+
+   Retransmit the reply for an existing SIP transaction.
+
+   Parameters:
+     * callid - SIP Call-ID header
+     * cseq - SIP CSeq header
+
+   Example 1.113. Using “tm.retransmit_reply_callid”
+...
+kamcli rpc tm.retransmit_reply_callid "abc-xyz" "10 INVITE"
+...
+
+5.14.  tm.clean
 
    Trigger a hard clean of expired transactions.
 
    Parameters:
      * none
 
-5.14.  tm.stats
+5.15.  tm.stats
 
    Gets information about current and past TM transaction handling.
 
@@ -3336,7 +3357,7 @@ kamcli rpc tm.retransmit_reply 1234:5678
    enabled with the t_on_branch_failure function. This event_route uses
    the BRANCH_FAILURE_ROUTE route type.
 
-   Example 1.113. event_route[tm:branch-failure:id] usage
+   Example 1.114. event_route[tm:branch-failure:id] usage
 ...
 request_route {
     ...
@@ -3362,7 +3383,7 @@ event_route[tm:branch-failure:myroute] {
    The request can still be updated, i.e., changes are possible to R-URI
    ($ru), destination URI ($du) or the send socket ($fs).
 
-   Example 1.114. event_route[tm:local-request] usage
+   Example 1.115. event_route[tm:local-request] usage
 ...
 event_route [tm:local-request] {
     xlog("L_INFO", "Routing locally generated $rm to $ru\n");
@@ -3375,7 +3396,7 @@ event_route [tm:local-request] {
    Executed after the tm module sent a local generated, transaction
    stateful response.
 
-   Example 1.115. event_route[tm:local-response] usage
+   Example 1.116. event_route[tm:local-response] usage
 ...
 event_route[tm:local-response] {
     xlog("tm:local-response replied locally\n");

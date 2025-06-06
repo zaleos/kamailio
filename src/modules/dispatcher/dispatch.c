@@ -385,6 +385,9 @@ int ds_set_attrs(ds_dest_t *dest, str *vattrs)
 		} else if(pit->name.len == 8
 				  && strncasecmp(pit->name.s, "sockname", 8) == 0) {
 			dest->attrs.sockname = pit->body;
+		} else if(pit->name.len == 11
+				  && strncasecmp(pit->name.s, "ping_socket", 11) == 0) {
+			dest->attrs.ping_socket = pit->body;
 		} else if(pit->name.len == 7
 				  && strncasecmp(pit->name.s, "rweight", 7) == 0) {
 			tmp_ival = 0;
@@ -652,6 +655,26 @@ ds_dest_t *pack_dest(str iuri, int flags, int priority, str *attrs, int dload)
 		dp->sock = ds_default_sockinfo;
 	}
 
+	/* set send socket to be used for sending the probing requests */
+	if(dp->attrs.ping_socket.s && dp->attrs.ping_socket.len > 0) {
+		/* parse_phostport(...) expects 0-terminated string
+		 * - after socket parameter is either ';' or '\0' */
+		STR_VTOZ(dp->attrs.ping_socket.s[dp->attrs.ping_socket.len], c);
+		if(parse_phostport(
+				   dp->attrs.ping_socket.s, &host.s, &host.len, &port, &proto)
+				!= 0) {
+			LM_ERR("bad socket <%.*s>\n", dp->attrs.ping_socket.len,
+					dp->attrs.ping_socket.s);
+			STR_ZTOV(dp->attrs.ping_socket.s[dp->attrs.ping_socket.len], c);
+			goto err;
+		}
+		STR_ZTOV(dp->attrs.ping_socket.s[dp->attrs.ping_socket.len], c);
+		if(grep_sock_info(&host, (unsigned short)port, proto) == 0) {
+			LM_ERR("non-local socket <%.*s>\n", dp->attrs.ping_socket.len,
+					dp->attrs.ping_socket.s);
+			goto err;
+		}
+	}
 
 	dp->host.s = dp->uri.s + (puri.host.s - uri.s);
 	dp->host.len = puri.host.len;
@@ -721,6 +744,12 @@ ds_dest_t *add_dest2list(int id, str uri, int flags, int priority, str *attrs,
 	ds_set_t *sp = NULL;
 	ds_dest_t *dp0 = NULL;
 	ds_dest_t *dp1 = NULL;
+
+	/* Check if tm binding (by testing tmb.t_gett) is loaded and if not, disable the probing */
+	if(tmb.t_gett == NULL && (flags & DS_PROBING_DST)) {
+		LM_WARN("tm module not loaded, disabling probing\n");
+		flags &= ~DS_PROBING_DST;
+	}
 
 	dp = pack_dest(uri, flags, priority, attrs, dload);
 	if(!dp) {
@@ -4128,12 +4157,17 @@ void ds_ping_set(ds_set_t *node)
 			 *		transaction_cb cb, void* cbp); */
 			set_uac_req(&uac_r, &ds_ping_method, 0, 0, 0, TMCB_LOCAL_COMPLETED,
 					ds_options_callback, (void *)(long)node->id);
-			if(node->dlist[j].attrs.sockname.s != NULL
-					&& node->dlist[j].attrs.sockname.len > 0) {
+			if(node->dlist[j].attrs.ping_socket.s != NULL
+					&& node->dlist[j].attrs.ping_socket.len > 0) {
+				uac_r.ssock = &node->dlist[j].attrs.ping_socket;
+			} else if(node->dlist[j].attrs.sockname.s != NULL
+					  && node->dlist[j].attrs.sockname.len > 0) {
 				uac_r.ssockname = &node->dlist[j].attrs.sockname;
 			} else if(node->dlist[j].attrs.socket.s != NULL
 					  && node->dlist[j].attrs.socket.len > 0) {
 				uac_r.ssock = &node->dlist[j].attrs.socket;
+			} else if(ds_ping_socket.s != NULL && ds_ping_socket.len > 0) {
+				uac_r.ssock = &ds_ping_socket;
 			} else if(ds_default_sockname.s != NULL
 					  && ds_default_sockname.len > 0) {
 				uac_r.ssockname = &ds_default_sockname;

@@ -1363,19 +1363,57 @@ static int fixup_dlg_req_with_headers_and_content(void **param, int param_no)
 	return 0;
 }
 
+static int ki_dlg_req_with_headers_and_content(struct sip_msg *msg, int nside,
+		str *smethod, str *sheaders, str *scontent_type, str *scontent)
+{
+	dlg_cell_t *dlg = NULL;
+
+	dlg = dlg_get_ctx_dialog();
+	if(dlg == NULL)
+		return -1;
+
+	if(nside == 1) {
+		if(dlg_request_within(msg, dlg, DLG_CALLER_LEG, smethod, sheaders,
+				   scontent_type, scontent)
+				!= 0)
+			goto error;
+		goto done;
+	} else if(nside == 2) {
+		if(dlg_request_within(msg, dlg, DLG_CALLEE_LEG, smethod, sheaders,
+				   scontent_type, scontent)
+				!= 0)
+			goto error;
+		goto done;
+	} else {
+		if(dlg_request_within(msg, dlg, DLG_CALLER_LEG, smethod, sheaders,
+				   scontent_type, scontent)
+				!= 0)
+			goto error;
+		if(dlg_request_within(msg, dlg, DLG_CALLEE_LEG, smethod, sheaders,
+				   scontent_type, scontent)
+				!= 0)
+			goto error;
+		goto done;
+	}
+
+done:
+	dlg_release(dlg);
+	return 1;
+
+error:
+	dlg_release(dlg);
+	return -1;
+}
+
 static int w_dlg_req_with_headers_and_content(struct sip_msg *msg, char *side,
 		char *method, char *headers, char *content_type, char *content)
 {
-	dlg_cell_t *dlg = NULL;
 	int n;
 	str str_method = {0, 0};
 	str str_headers = {0, 0};
 	str str_content_type = {0, 0};
 	str str_content = {0, 0};
 
-	dlg = dlg_get_ctx_dialog();
-	if(dlg == NULL)
-		return -1;
 
 	if(fixup_get_svalue(msg, (gparam_p)method, &str_method) != 0) {
 		LM_ERR("unable to get Method\n");
@@ -1417,36 +1455,11 @@ static int w_dlg_req_with_headers_and_content(struct sip_msg *msg, char *side,
 	}
 
 	n = (int)(long)side;
-	if(n == 1) {
-		if(dlg_request_within(msg, dlg, DLG_CALLER_LEG, &str_method,
-				   &str_headers, &str_content_type, &str_content)
-				!= 0)
-			goto error;
-		goto done;
-	} else if(n == 2) {
-		if(dlg_request_within(msg, dlg, DLG_CALLEE_LEG, &str_method,
-				   &str_headers, &str_content_type, &str_content)
-				!= 0)
-			goto error;
-		goto done;
-	} else {
-		if(dlg_request_within(msg, dlg, DLG_CALLER_LEG, &str_method,
-				   &str_headers, &str_content_type, &str_content)
-				!= 0)
-			goto error;
-		if(dlg_request_within(msg, dlg, DLG_CALLEE_LEG, &str_method,
-				   &str_headers, &str_content_type, &str_content)
-				!= 0)
-			goto error;
-		goto done;
-	}
 
-done:
-	dlg_release(dlg);
-	return 1;
+	return ki_dlg_req_with_headers_and_content(
+			msg, n, &str_method, &str_headers, &str_content_type, &str_content);
 
 error:
-	dlg_release(dlg);
 	return -1;
 }
 
@@ -2605,6 +2618,27 @@ static int ki_dlg_var_is_null(sip_msg_t *msg, str *name)
 /**
  *
  */
+static int ki_dlg_req_within4(struct sip_msg *msg, str *side, str *method,
+		str *content_type, str *content)
+{
+	int n = 0;
+	if(side && side->len > 0) {
+		if(side->len == 6 && strncasecmp(side->s, "caller", 6) == 0) {
+			n = 1;
+		} else if(side->len == 6 && strncasecmp(side->s, "callee", 6) == 0) {
+			n = 2;
+		} else {
+			return -1;
+		}
+	}
+
+	return ki_dlg_req_with_headers_and_content(
+			msg, n, method, NULL, content_type, content);
+}
+
+/**
+ *
+ */
 /* clang-format off */
 static sr_kemi_t sr_kemi_dialog_exports[] = {
 	{ str_init("dialog"), str_init("dlg_manage"),
@@ -2766,6 +2800,11 @@ static sr_kemi_t sr_kemi_dialog_exports[] = {
 		SR_KEMIP_INT, ki_dlg_bridge,
 		{ SR_KEMIP_STR, SR_KEMIP_STR, SR_KEMIP_STR,
 			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
+	},
+	{ str_init("dialog"), str_init("dlg_req_within4"),
+		SR_KEMIP_INT, ki_dlg_req_within4,
+		{ SR_KEMIP_STR, SR_KEMIP_STR, SR_KEMIP_STR,
+			SR_KEMIP_STR, SR_KEMIP_NONE, SR_KEMIP_NONE }
 	},
 
 	{ {0, 0}, {0, 0}, 0, NULL, { 0, 0, 0, 0, 0, 0 } }

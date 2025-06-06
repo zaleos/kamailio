@@ -288,6 +288,7 @@ void print_internals(void)
 	printf("  Version: %s\n", full_version);
 	printf("  Default config: %s\n", CFG_FILE);
 	printf("  Default paths to modules: %s\n", MODS_DIR);
+	printf("  Default path to runtime dir: %s\n", RUN_DIR);
 	printf("  Compile flags: %s\n", ver_flags);
 	printf("  MAX_RECV_BUFFER_SIZE=%d\n", MAX_RECV_BUFFER_SIZE);
 	printf("  MAX_SEND_BUFFER_SIZE=%d\n", MAX_SEND_BUFFER_SIZE);
@@ -495,6 +496,10 @@ struct socket_info *sendipv6_sctp;
 unsigned short port_no = 0; /* default port*/
 #ifdef USE_TLS
 unsigned short tls_port_no = 0; /* default port */
+#endif
+
+#ifdef USE_TLS
+int tls_connection_match_domain = 0;
 #endif
 
 struct host_alias *aliases = 0; /* name aliases list */
