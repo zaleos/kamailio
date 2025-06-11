@@ -44,6 +44,9 @@
 #include "pvar.h"
 #include "strutils.h"
 
+__thread const char* current_cfg_file = NULL;
+__thread int current_cfg_line = 0;
+
 static void log_callid_set(sip_msg_t *msg);
 
 char *_km_log_engine_type = NULL;

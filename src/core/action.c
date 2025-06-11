@@ -1617,6 +1617,8 @@ int run_actions(struct run_act_ctx *h, struct action *a, struct sip_msg *msg)
 		if(unlikely(log_prefix_mode == 1)) {
 			log_prefix_set(msg);
 		}
+		current_cfg_file = _cfg_crt_action->cfile;
+		current_cfg_line = _cfg_crt_action->cline;
 		ret = do_action(h, t, msg);
 		_cfg_crt_action = 0;
 		if(unlikely(log_prefix_mode == 1)) {
@@ -1651,7 +1653,10 @@ int run_actions(struct run_act_ctx *h, struct action *a, struct sip_msg *msg)
 		}
 		/* ignore error returns */
 	}
-
+	if(a != NULL) {
+		current_cfg_file = NULL;
+		current_cfg_line = 0;
+	}
 	h->rec_lev--;
 end:
 	return ret;
