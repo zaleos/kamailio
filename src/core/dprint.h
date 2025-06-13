@@ -350,14 +350,13 @@ void log_prefix_init(void);
 												LOG_MNAME, LOG_MNAME_LEN));   \
 				__kld.v_level = __llevel;                                     \
 				__kld.v_lname = (lname) ? (lname) : LOG_LEVEL2NAME(__llevel); \
+				__kld.v_mname = LOG_MNAME;  							      \
 				if(current_cfg_file != NULL && current_cfg_line !=0) {        \
 					__kld.v_fname = current_cfg_file;                         \
 					__kld.v_fline = current_cfg_line;                         \
-					__kld.v_mname = "cfg";  							      \
 				} else {													  \
 					__kld.v_fname = __FILE__;                                 \
 					__kld.v_fline = __LINE__;                                 \
-					__kld.v_mname = LOG_MNAME;                                \
 				}                                                             \
 				__kld.v_func = LOGV_FUNCNAME_STR(funcname);                   \
 				__kld.v_locinfo = prefix;                                     \
