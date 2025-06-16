@@ -1617,9 +1617,13 @@ int run_actions(struct run_act_ctx *h, struct action *a, struct sip_msg *msg)
 		if(unlikely(log_prefix_mode == 1)) {
 			log_prefix_set(msg);
 		}
+		const char* original_current_cfg_file = current_cfg_file;
+		int original_current_cfg_line = current_cfg_line;
 		current_cfg_file = _cfg_crt_action->cfile;
 		current_cfg_line = _cfg_crt_action->cline;
 		ret = do_action(h, t, msg);
+		current_cfg_file = original_current_cfg_file;
+		current_cfg_line = original_current_cfg_line;
 		_cfg_crt_action = 0;
 		if(unlikely(log_prefix_mode == 1)) {
 			log_prefix_set(msg);
