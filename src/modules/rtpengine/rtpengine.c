@@ -514,6 +514,11 @@ static cmd_export_t cmds[] = {
 		fixup_spve_null, fixup_free_spve_null, ANY_ROUTE},
 	{"rtpengine_delete", (cmd_function)rtpengine_delete1_f, 2,
 		fixup_spve_spve, fixup_free_spve_spve, ANY_ROUTE},
+	{"rtpengine_destroy", (cmd_function)rtpengine_delete1_f, 0, 0, 0, ANY_ROUTE},
+	{"rtpengine_destroy", (cmd_function)rtpengine_delete1_f, 1,
+		fixup_spve_null, fixup_free_spve_null, ANY_ROUTE},
+	{"rtpengine_destroy", (cmd_function)rtpengine_delete1_f, 2,
+		fixup_spve_spve, fixup_free_spve_spve, ANY_ROUTE},
 	{"rtpengine_query", (cmd_function)rtpengine_query1_f, 0, 0, 0, ANY_ROUTE},
 	{"rtpengine_query", (cmd_function)rtpengine_query1_f, 1,
 		fixup_spve_null, fixup_free_spve_null, ANY_ROUTE},
@@ -3065,7 +3070,6 @@ static int child_init(int rank)
 
 	/* random start value for for cookie sequence number */
 	myseqn = fastrand();
-	LM_ERR("myseqn %u\n", myseqn);
 
 	// vector of pointers to queried nodes
 	queried_nodes_ptr = (struct rtpp_node **)pkg_malloc(

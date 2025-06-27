@@ -949,7 +949,7 @@ static int ki_ds_mark_dst(sip_msg_t *msg)
 	if(ds_probing_mode == DS_PROBE_ALL)
 		state |= DS_PROBING_DST;
 
-	return ds_mark_dst(msg, state);
+	return ds_mark_dst_mode(msg, state, 1);
 }
 
 /**
@@ -977,7 +977,7 @@ static int ki_ds_mark_dst_state(sip_msg_t *msg, str *sval)
 		return -1;
 	}
 
-	return ds_mark_dst(msg, state);
+	return ds_mark_dst_mode(msg, state, 1);
 }
 
 /**
@@ -1008,7 +1008,7 @@ static int ki_ds_mark_addr(sip_msg_t *msg, str *vstate, int vgroup, str *vuri)
 		return -1;
 	}
 
-	return ds_mark_addr(msg, state, vgroup, vuri);
+	return ds_mark_addr(msg, state, vgroup, vuri, 1);
 }
 
 /**
@@ -1392,6 +1392,13 @@ static int pv_get_dsv(sip_msg_t *msg, pv_param_t *param, pv_value_t *res)
 			return pv_get_null(msg, param, res);
 		case 2:
 			return pv_get_sintval(msg, param, res, rctx->flags);
+		case 3:
+			if(rctx->uri.s != NULL && rctx->uri.len > 0) {
+				return pv_get_strval(msg, param, res, &rctx->uri);
+			}
+			return pv_get_null(msg, param, res);
+		case 4:
+			return pv_get_sintval(msg, param, res, rctx->setid);
 		default:
 			return pv_get_null(msg, param, res);
 	}
@@ -1406,6 +1413,12 @@ static int pv_parse_dsv(pv_spec_p sp, str *in)
 		return -1;
 
 	switch(in->len) {
+		case 3:
+			if(strncmp(in->s, "uri", 3) == 0)
+				sp->pvp.pvn.u.isname.name.n = 3;
+			else
+				goto error;
+			break;
 		case 4:
 			if(strncmp(in->s, "code", 4) == 0)
 				sp->pvp.pvn.u.isname.name.n = 0;
@@ -1415,6 +1428,10 @@ static int pv_parse_dsv(pv_spec_p sp, str *in)
 		case 5:
 			if(strncmp(in->s, "flags", 5) == 0)
 				sp->pvp.pvn.u.isname.name.n = 2;
+			else if(strncmp(in->s, "setid", 5) == 0)
+				sp->pvp.pvn.u.isname.name.n = 4;
+			else if(strncmp(in->s, "group", 5) == 0)
+				sp->pvp.pvn.u.isname.name.n = 4;
 			else
 				goto error;
 			break;
@@ -2054,12 +2071,13 @@ int ds_rpc_print_set(
 				rpc->fault(ctx, 500, "Internal error creating dest struct");
 				return -1;
 			}
-			if(rpc->struct_add(wh, "SSdddSSSSjj", "BODY",
+			if(rpc->struct_add(wh, "SSddddSSSSjj", "BODY",
 					   &(node->dlist[j].attrs.body), "DUID",
 					   (node->dlist[j].attrs.duid.s)
 							   ? &(node->dlist[j].attrs.duid)
 							   : &data,
-					   "MAXLOAD", node->dlist[j].attrs.maxload, "WEIGHT",
+					   "PROBING_COUNT", node->dlist[j].probing_count, "MAXLOAD",
+					   node->dlist[j].attrs.maxload, "WEIGHT",
 					   node->dlist[j].attrs.weight, "RWEIGHT",
 					   node->dlist[j].attrs.rweight, "SOCKET",
 					   (node->dlist[j].attrs.socket.s)
