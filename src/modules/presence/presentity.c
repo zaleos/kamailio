@@ -783,7 +783,7 @@ static int ps_db_update_presentity(sip_msg_t *msg, presentity_t *presentity,
 		n_query_cols++;
 
 		query_cols[n_query_cols] = &str_body_col;
-		query_vals[n_query_cols].type = DB1_BLOB;
+		query_vals[n_query_cols].type = DB1_STR;
 		query_vals[n_query_cols].nul = 0;
 		query_vals[n_query_cols].val.str_val = *body;
 		n_query_cols++;
