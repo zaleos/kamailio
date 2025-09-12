@@ -61,6 +61,7 @@ static tr_export_t mod_trans[] = {
 	{{"line", sizeof("line") - 1}, tr_parse_line}, /* line class */
 	{{"urialias", sizeof("urialias") - 1}, tr_parse_urialias}, /* uri alias class */
 	{{"val", sizeof("val") - 1}, tr_parse_val}, /* val class */
+	{{"num", sizeof("num") - 1}, tr_parse_num}, /* num class */
 
 	{{0, 0}, 0}
 };
@@ -177,7 +178,7 @@ static pv_export_t mod_pvs[] = {
 			PVT_OTHER, pv_get_diversion, 0, 0, 0, pv_init_iname, 1},
 	{{"dir", (sizeof("dir") - 1)}, /* */
 			PVT_OTHER, pv_get_diversion, 0, 0, 0, pv_init_iname, 2},
-	{{"dip", (sizeof("dis") - 1)}, /* */
+	{{"dip", (sizeof("dip") - 1)}, /* */
 			PVT_OTHER, pv_get_diversion, 0, 0, 0, pv_init_iname, 3},
 	{{"dic", (sizeof("dic") - 1)}, /* */
 			PVT_OTHER, pv_get_diversion, 0, 0, 0, pv_init_iname, 4},

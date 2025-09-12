@@ -105,8 +105,8 @@ static int ds_ping_interval = 0;
 int ds_ping_latency_stats = 0;
 int ds_ping_fr_timeout = 0;
 int ds_retain_latency_stats = 0;
-int ds_latency_estimator_alpha_i = 900;
-float ds_latency_estimator_alpha = 0.9f;
+int ds_latency_estimator_alpha_i = 100;
+float ds_latency_estimator_alpha = 0.1f;
 int ds_probing_mode = DS_PROBE_NONE;
 
 static str ds_ping_reply_codes_str= STR_NULL;
@@ -149,6 +149,7 @@ str ds_attrs_pvname   = STR_NULL;
 pv_spec_t ds_attrs_pv;
 
 str ds_event_callback = STR_NULL;
+int ds_event_callback_mode = 0;
 str ds_db_extra_attrs = STR_NULL;
 param_t *ds_db_extra_attrs_list = NULL;
 
@@ -322,6 +323,7 @@ static param_export_t params[]={
 	{"ds_ping_socket",     PARAM_STR, &ds_ping_socket},
 	{"ds_timer_mode",      PARAM_INT, &ds_timer_mode},
 	{"event_callback",     PARAM_STR, &ds_event_callback},
+	{"event_callback_mode", PARAM_INT, &ds_event_callback_mode},
 	{"ds_attrs_none",      PARAM_INT, &ds_attrs_none},
 	{"ds_db_extra_attrs",  PARAM_STR, &ds_db_extra_attrs},
 	{"ds_load_mode",       PARAM_INT, &ds_load_mode},
@@ -373,6 +375,9 @@ static int mod_init(void)
 	if(ds_ping_active_init() < 0) {
 		return -1;
 	}
+	if(ds_sruid_init() < 0) {
+		return -1;
+	}
 
 	if(ds_init_rpc() < 0) {
 		LM_ERR("failed to register RPC commands\n");
@@ -384,7 +389,20 @@ static int mod_init(void)
 		LM_ERR("Fail to declare the configuration\n");
 		return -1;
 	}
-
+	/* if the ping-keepalive-timer is enabled the tm-api needs to be loaded */
+	if(ds_ping_interval > 0) {
+		if(load_tm_api(&tmb) == -1) {
+			LM_ERR("could not load the TM-functions - disable DS ping\n");
+			return -1;
+		}
+		if(ds_timer_mode == 1) {
+			if(sr_wtimer_add(ds_check_timer, NULL, ds_ping_interval) < 0)
+				return -1;
+		} else {
+			if(register_timer(ds_check_timer, NULL, ds_ping_interval) < 0)
+				return -1;
+		}
+	}
 	/* Initialize the counter */
 	ds_ping_reply_codes = (int **)shm_malloc(sizeof(unsigned int *));
 	if(!(ds_ping_reply_codes)) {
@@ -530,26 +548,6 @@ static int mod_init(void)
 		}
 	}
 
-	/* Only, if the Probing-Timer is enabled the TM-API needs to be loaded: */
-	if(ds_ping_interval > 0) {
-		/*****************************************************
-		 * TM-Bindings
-		 *****************************************************/
-		if(load_tm_api(&tmb) == -1) {
-			LM_ERR("could not load the TM-functions - disable DS ping\n");
-			return -1;
-		}
-		/*****************************************************
-		 * Register the PING-Timer
-		 *****************************************************/
-		if(ds_timer_mode == 1) {
-			if(sr_wtimer_add(ds_check_timer, NULL, ds_ping_interval) < 0)
-				return -1;
-		} else {
-			if(register_timer(ds_check_timer, NULL, ds_ping_interval) < 0)
-				return -1;
-		}
-	}
 	if(ds_latency_estimator_alpha_i > 0
 			&& ds_latency_estimator_alpha_i < 1000) {
 		ds_latency_estimator_alpha = ds_latency_estimator_alpha_i / 1000.0f;
@@ -949,7 +947,7 @@ static int ki_ds_mark_dst(sip_msg_t *msg)
 	if(ds_probing_mode == DS_PROBE_ALL)
 		state |= DS_PROBING_DST;
 
-	return ds_mark_dst_mode(msg, state, 1);
+	return ds_mark_dst_mode(msg, state, DS_STATE_MODE_SET | DS_STATE_MODE_FUNC);
 }
 
 /**
@@ -977,7 +975,7 @@ static int ki_ds_mark_dst_state(sip_msg_t *msg, str *sval)
 		return -1;
 	}
 
-	return ds_mark_dst_mode(msg, state, 1);
+	return ds_mark_dst_mode(msg, state, DS_STATE_MODE_SET | DS_STATE_MODE_FUNC);
 }
 
 /**
@@ -1008,7 +1006,8 @@ static int ki_ds_mark_addr(sip_msg_t *msg, str *vstate, int vgroup, str *vuri)
 		return -1;
 	}
 
-	return ds_mark_addr(msg, state, vgroup, vuri, 1);
+	return ds_mark_addr(
+			msg, state, vgroup, vuri, DS_STATE_MODE_SET | DS_STATE_MODE_FUNC);
 }
 
 /**
@@ -2036,8 +2035,9 @@ int ds_rpc_print_set(
 		else
 			c[1] = 'X';
 
-		if(rpc->struct_add(vh, "Ssd", "URI", &node->dlist[j].uri, "FLAGS", c,
-				   "PRIORITY", node->dlist[j].priority)
+		if(rpc->struct_add(vh, "SsdS", "URI", &node->dlist[j].uri, "FLAGS", c,
+				   "PRIORITY", node->dlist[j].priority, "IUID",
+				   &node->dlist[j].suid)
 				< 0) {
 			rpc->fault(ctx, 500, "Internal error creating dest struct");
 			return -1;
@@ -2233,7 +2233,7 @@ static void dispatcher_rpc_set_state_helper(rpc_t *rpc, void *ctx, int mattr)
 				return;
 			}
 		} else {
-			if(ds_reinit_state(group, &dest, stval) < 0) {
+			if(ds_reinit_state(group, &dest, NULL, stval) < 0) {
 				rpc->fault(ctx, 500, "State Update Failed");
 				return;
 			}

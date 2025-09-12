@@ -97,6 +97,7 @@
 
 #include "tcp_info.h"
 #include "tcp_options.h"
+#include "tcp_mtops.h"
 #include "ut.h"
 #include "events.h"
 #include "cfg/cfg_struct.h"
@@ -162,14 +163,14 @@ struct fd_cache_entry
 static struct fd_cache_entry fd_cache[TCP_FD_CACHE_SIZE];
 #endif /* TCP_FD_CACHE */
 
-static int is_tcp_main = 0;
-
+static int _is_tcp_main = 0;
 
 enum poll_types tcp_poll_method = 0; /* by default choose the best method */
 int tcp_main_max_fd_no = 0;
 int tcp_max_connections = DEFAULT_TCP_MAX_CONNECTIONS;
 int tls_max_connections = DEFAULT_TLS_MAX_CONNECTIONS;
 int tcp_accept_unique = 0;
+int ksr_tcp_main_threads = 0;
 
 int tcp_connection_match = TCPCONN_MATCH_DEFAULT;
 
@@ -213,6 +214,14 @@ static ticks_t tcpconn_main_timeout(ticks_t, struct timer_ln *, void *);
 inline static int _tcpconn_add_alias_unsafe(struct tcp_connection *c, int port,
 		struct ip_addr *l_ip, int l_port, int flags);
 
+
+/**
+ *
+ */
+int is_tcp_main(void)
+{
+	return _is_tcp_main;
+}
 
 /* sets source address used when opening new sockets and no source is specified
  *  (by default the address is choosen by the kernel)
@@ -4928,7 +4937,7 @@ static inline void tcpconn_destroy_all(void)
 		c = tcpconn_id_hash[h];
 		while(c) {
 			next = c->id_next;
-			if(is_tcp_main) {
+			if(_is_tcp_main) {
 				/* we cannot close or remove the fd if we are not in the
 					 * tcp main proc.*/
 				if((c->flags & F_CONN_MAIN_TIMER)) {
@@ -4973,7 +4982,7 @@ void tcp_main_loop()
 	struct socket_info *si;
 	int r;
 
-	is_tcp_main = 1; /* mark this process as tcp main */
+	_is_tcp_main = 1; /* mark this process as tcp main */
 
 	tcp_main_max_fd_no = get_max_open_fds();
 	/* init send fd queues (here because we want mem. alloc only in the tcp
@@ -5000,6 +5009,16 @@ void tcp_main_loop()
 	if(cfg_get(tcp, tcp_cfg, fd_cache))
 		tcp_fd_cache_init();
 #endif /* TCP_FD_CACHE */
+
+	if(ksr_tcp_main_threads != 0) {
+		if(ksr_tcpx_proc_list_prepare() < 0) {
+			LM_ERR("failed to prepare multi-thread processing list\n");
+			goto error;
+		}
+		LM_INFO("tcp main processing threads prepared\n");
+	} else {
+		LM_INFO("tcp main processing threads not enabled\n");
+	}
 
 	/* add all the sockets we listen on for connections */
 	for(si = tcp_listen; si; si = si->next) {

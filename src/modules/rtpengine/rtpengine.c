@@ -58,6 +58,7 @@
 #include "../../core/fmsg.h"
 #include "../../core/forward.h"
 #include "../../core/mem/mem.h"
+#include "../../core/crypto/shautils.h"
 #include "../../core/parser/parse_from.h"
 #include "../../core/parser/parse_to.h"
 #include "../../core/parser/parse_uri.h"
@@ -85,7 +86,6 @@
 #include "../../core/cfg/cfg_struct.h"
 #include "../../core/rand/fastrand.h"
 #include "../../modules/tm/tm_load.h"
-#include "../../modules/crypto/api.h"
 #include "../../modules/lwsc/api.h"
 #include "rtpengine.h"
 #include "rtpengine_funcs.h"
@@ -441,8 +441,6 @@ static pv_elem_t *extra_id_pv = NULL;
 static struct minmax_mos_label_stats global_mos_stats, side_A_mos_stats,
 		side_B_mos_stats;
 int got_any_mos_pvs;
-struct crypto_binds rtpengine_cb;
-
 
 /* clang-format off */
 static cmd_export_t cmds[] = {
@@ -527,9 +525,9 @@ static cmd_export_t cmds[] = {
 	{"rtpengine_query_v", (cmd_function)w_rtpengine_query_v, 2,
 		fixup_rtpengine_query_v, fixup_free_rtpengine_query_v, ANY_ROUTE},
 	{"bind_rtpengine", (cmd_function)bind_rtpengine, 0, 0, 0, 0},
-	{"rtpengine_subscribe_offer", (cmd_function)rtpengine_subscribe_request_wrap_f, 4,
+	{"rtpengine_subscribe_request", (cmd_function)rtpengine_subscribe_request_wrap_f, 4,
 	fixup_rtpengine_subscribe_request_v, fixup_free_rtpengine_subscribe_request_v, ANY_ROUTE},
-	{"rtpengine_subscribe_offer", (cmd_function)rtpengine_subscribe_request_wrap_f, 5,
+	{"rtpengine_subscribe_request", (cmd_function)rtpengine_subscribe_request_wrap_f, 5,
 	fixup_rtpengine_subscribe_request_v, fixup_free_rtpengine_subscribe_request_v, ANY_ROUTE},
 	{"rtpengine_subscribe_answer", (cmd_function)rtpengine_subscribe_answer_wrap_f, 1,
 	fixup_spve_null, fixup_free_spve_null, ANY_ROUTE},
@@ -2601,13 +2599,6 @@ static int mod_init(void)
 		return -1;
 	}
 
-	if(hash_algo == RTP_HASH_SHA1_CALLID) {
-		if(load_crypto_api(&rtpengine_cb) != 0) {
-			LM_ERR("Crypto module required in order to have SHA1 hashing!\n");
-			return -1;
-		}
-	}
-
 	/* Enable ping timer if interval is positive */
 	if(rtpengine_ping_interval > 0) {
 		register_timer(rtpengine_ping_check_timer, 0, rtpengine_ping_interval);
@@ -3178,9 +3169,10 @@ static void mod_destroy(void)
 
 static char *gencookie(void)
 {
-	static char cook[34];
+	static char cook[35]; // 11 + 1 + 10 + 1 + 10 + 1 + 1
 
-	snprintf(cook, 34, "%d_%u_%u ", server_id, fastrand(), myseqn);
+	snprintf(cook, 35, "%" PRId32 "_%" PRIu32 "_%" PRIu32 " ",
+			(int32_t)server_id, (uint32_t)fastrand(), (uint32_t)myseqn);
 	myseqn++;
 	return cook;
 }
@@ -4128,43 +4120,132 @@ static bencode_item_t *rtpp_function_call_ok(bencode_buffer_t *bencbuf,
  */
 static void rtpengine_ping_check_timer(unsigned int ticks, void *param)
 {
-	struct rtpp_set *rtpp_list;
-	struct rtpp_node *crt_rtpp;
-	int err = 0;
-	int ret;
+	struct rtpp_set *rtpp_list = NULL;
+	struct rtpp_node *crt_rtpp = NULL;
+	struct rtpp_node *nodes;
+	int idx = 0;
+	int total_nodes = 0;
 	int rtpp_disabled = 0;
 
 	/* No need to test them while building */
 	if(build_rtpp_socks(1, 0)) {
+		LM_WARN("Skip timer ping. Failed to build sockets!\n");
 		return;
 	}
-	/* Most of this is from rtpengine_rpc_iterate functions maybe split? */
-	LM_DBG("Pinging all enabled rtpengines...\n");
+
+	/* Alloc local copy of nodes, no locks */
+	lock_get(rtpp_no_lock);
+	total_nodes = *rtpp_no;
+	lock_release(rtpp_no_lock);
+
+	LM_DBG("Alloc %d nodes to pkg...\n", total_nodes);
+	nodes = (struct rtpp_node *)pkg_malloc(
+			sizeof(struct rtpp_node) * total_nodes);
+
+	/* Is pkg available? */
+	if(!nodes) {
+		LM_WARN("Skip timer ping. Not enough pkg for nodes!\n");
+		return;
+	}
+	memset(nodes, 0, sizeof(struct rtpp_node) * total_nodes);
+
+	/* Make a local copy of nodes, under locks */
+	LM_DBG("Copy %d nodes to pkg...\n", total_nodes);
 	lock_get(rtpp_set_list->rset_head_lock);
 	for(rtpp_list = rtpp_set_list->rset_first; rtpp_list != NULL;
 			rtpp_list = rtpp_list->rset_next) {
+		lock_get(rtpp_list->rset_lock);
+		for(crt_rtpp = rtpp_list->rn_first, idx = 0;
+				crt_rtpp != NULL && idx < total_nodes;
+				crt_rtpp = crt_rtpp->rn_next, idx++) {
+			nodes[idx] = *crt_rtpp;
+			nodes[idx].rn_address = (char *)pkg_malloc(
+					sizeof(char) * (strlen(crt_rtpp->rn_address) + 1));
+			nodes[idx].rn_url.s = (char *)pkg_malloc(
+					sizeof(char) * (strlen(crt_rtpp->rn_url.s) + 1));
 
+			/* Is pkg available? */
+			if(!nodes[idx].rn_address || !nodes[idx].rn_url.s) {
+				LM_WARN("Skip timer ping. Not enough pkg for node url or "
+						"address!\n");
+				lock_release(rtpp_list->rset_lock);
+				lock_release(rtpp_set_list->rset_head_lock);
+				goto free_nodes;
+			}
+			strcpy(nodes[idx].rn_address, crt_rtpp->rn_address);
+			strcpy(nodes[idx].rn_url.s, crt_rtpp->rn_url.s);
+		}
+		lock_release(rtpp_list->rset_lock);
+	}
+	lock_release(rtpp_set_list->rset_head_lock);
+
+	/* Ping the nodes, no locks */
+	LM_DBG("Ping nodes...\n");
+	for(idx = 0; idx < total_nodes; idx++) {
+		/* Skip not needed node */
+		if(!nodes[idx].rn_displayed
+				|| (nodes[idx].rn_disabled
+						&& nodes[idx].rn_recheck_ticks
+								   == RTPENGINE_MAX_RECHECK_TICKS)) {
+			continue;
+		}
+
+		/* Ping node */
+		LM_DBG("Ping node %s\n", nodes[idx].rn_url.s);
+		crt_rtpp = &nodes[idx];
+		rtpengine_iter_cb_ping(crt_rtpp, rtpp_list, &rtpp_disabled);
+	}
+
+	/* Update nodes, under locks */
+	LM_DBG("Update nodes...\n");
+	lock_get(rtpp_set_list->rset_head_lock);
+	for(rtpp_list = rtpp_set_list->rset_first; rtpp_list != NULL;
+			rtpp_list = rtpp_list->rset_next) {
 		lock_get(rtpp_list->rset_lock);
 		for(crt_rtpp = rtpp_list->rn_first; crt_rtpp != NULL;
 				crt_rtpp = crt_rtpp->rn_next) {
-
-			if(!crt_rtpp->rn_displayed || crt_rtpp->rn_disabled) {
+			/* Skip not needed node */
+			if(!crt_rtpp->rn_displayed
+					|| (crt_rtpp->rn_disabled
+							&& crt_rtpp->rn_recheck_ticks
+									   == RTPENGINE_MAX_RECHECK_TICKS)) {
 				continue;
 			}
 
-			/* Ping all available nodes */
-			ret = rtpengine_iter_cb_ping(crt_rtpp, rtpp_list, &rtpp_disabled);
-			if(ret) {
-				err = 1;
-				break;
+			for(idx = 0; idx < total_nodes; idx++) {
+				/* Skip not needed node */
+				if(!nodes[idx].rn_displayed
+						|| (nodes[idx].rn_disabled
+								&& nodes[idx].rn_recheck_ticks
+										   == RTPENGINE_MAX_RECHECK_TICKS)) {
+					continue;
+				}
+
+				/* Update node if url match */
+				if(strcmp(crt_rtpp->rn_url.s, nodes[idx].rn_url.s) == 0) {
+					LM_DBG("Update node %s, disabled=%d\n", nodes[idx].rn_url.s,
+							nodes[idx].rn_disabled);
+					crt_rtpp->rn_recheck_ticks = nodes[idx].rn_recheck_ticks;
+					crt_rtpp->rn_disabled = nodes[idx].rn_disabled;
+				}
 			}
 		}
 		lock_release(rtpp_list->rset_lock);
-
-		if(err)
-			break;
 	}
 	lock_release(rtpp_set_list->rset_head_lock);
+
+free_nodes:
+	/* Free local copy of nodes, no locks */
+	LM_DBG("Free %d nodes from pkg...\n", total_nodes);
+	for(idx = 0; idx < total_nodes; idx++) {
+		if(nodes[idx].rn_address) {
+			pkg_free(nodes[idx].rn_address);
+		}
+		if(nodes[idx].rn_url.s) {
+			pkg_free(nodes[idx].rn_url.s);
+		}
+	}
+	pkg_free(nodes);
 }
 
 /**
@@ -4466,8 +4547,8 @@ static struct rtpp_node *select_rtpp_node_new(str callid, str viabranch,
 	struct rtpp_node *node;
 	unsigned i, sum, sumcut, weight_sum;
 	int was_forced = 0;
-
-	str hash_data;
+	unsigned char sha1[SHA1_DIGEST_LENGTH];
+	str hash_data = STR_NULL;
 
 	switch(hash_algo) {
 		case RTP_HASH_CALLID:
@@ -4475,18 +4556,13 @@ static struct rtpp_node *select_rtpp_node_new(str callid, str viabranch,
 
 			break;
 		case RTP_HASH_SHA1_CALLID:
-			if(rtpengine_cb.SHA1 == NULL) {
-				/* don't throw warning here; there is already a warni*/
-				LM_BUG("SHA1 algo set but crypto not loaded! Program shouldn't "
-					   "have started!");
+			if(callid.len <= 0 || callid.s == NULL) {
+				LM_ERR("Invalid callid for SHA1 hashing\n");
 				return NULL;
 			}
-
-			if(rtpengine_cb.SHA1(&callid, &hash_data) < 0) {
-				LM_ERR("SHA1 hash in crypto module failed!\n");
-				return NULL;
-			}
-
+			compute_sha1_raw(sha1, (u_int8_t *)callid.s, callid.len);
+			hash_data.s = (char *)sha1;
+			hash_data.len = SHA1_DIGEST_LENGTH;
 			break;
 		case RTP_HASH_CRC32_CALLID:
 			crc32_uint(&callid, &sum);

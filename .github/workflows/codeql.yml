@@ -42,7 +42,7 @@ jobs:
         language: [ javascript, cpp, python ]
 
     container:
-      image: ghcr.io/kamailio/pkg-kamailio-docker:${{ github.ref_name }}-bookworm
+      image: ghcr.io/kamailio/pkg-kamailio-docker:${{ github.ref_name }}-trixie
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 

@@ -3365,7 +3365,7 @@ rtpengine_manage();
 				This function can be used from ANY_ROUTE.
 			</para>
 			<example>
-				<title><function>rtpengine_off</function> usage</title>
+				<title><function>rtpengine_subscribe_request</function> usage</title>
 				<programlisting format="linespecific">
 route {
 ...

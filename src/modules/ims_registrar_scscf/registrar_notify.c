@@ -282,14 +282,12 @@ int can_publish_reg(struct sip_msg *msg, char *_t, char *str2)
 
 done:
 	if(presentity_uri.s)
-		shm_free(
-				presentity_uri
+		shm_free(presentity_uri
 						.s); // shm_malloc in cscf_get_public_identity_from_requri
 	return ret;
 error:
 	if(presentity_uri.s)
-		shm_free(
-				presentity_uri
+		shm_free(presentity_uri
 						.s); // shm_malloc in cscf_get_public_identity_from_requri
 	ret = CSCF_RETURN_ERROR;
 	return ret;
@@ -461,15 +459,13 @@ int can_subscribe_to_reg(struct sip_msg *msg, char *_t, char *str2)
 
 done:
 	if(presentity_uri.s)
-		shm_free(
-				presentity_uri
+		shm_free(presentity_uri
 						.s); // shm_malloc in cscf_get_public_identity_from_requri or get_presentity_from_subscriber_dialog
 	return ret;
 error:
 	ret = CSCF_RETURN_ERROR;
 	if(presentity_uri.s)
-		shm_free(
-				presentity_uri
+		shm_free(presentity_uri
 						.s); // shm_malloc in cscf_get_public_identity_from_requri or get_presentity_from_subscriber_dialog
 	return ret;
 }
@@ -1519,6 +1515,13 @@ int aor_to_contact(str *aor, str *contact)
 
 	if((p = memchr(contact->s, '>', contact->len))) {
 		contact->len = p - contact->s;
+	}
+
+	// remove default port 5060
+	if((p = memchr(contact->s, ':', contact->len))) {
+		if(contact->len - (p - contact->s) == 5 && !memcmp(p, ":5060", 5)) {
+			contact->len -= 5;
+		}
 	}
 
 	return ret;

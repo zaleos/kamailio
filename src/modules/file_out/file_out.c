@@ -246,7 +246,8 @@ static int fo_rotate_file(int index)
 
 static void fo_timer_check_interval(unsigned int ticks, void *param)
 {
-	for(int index = 0; index < *fo_number_of_files; index++) {
+	int index = 0;
+	for(index = 0; index < *fo_number_of_files; index++) {
 		if(fo_rotate_file(index) == 1) {
 			LM_DBG("Next write will rotate the file %d\n", index);
 		}
@@ -379,6 +380,7 @@ static int fo_fixup_free_int_pvar(void **param, int param_no)
 
 static int fo_add_filename(modparam_t type, void *val)
 {
+	int i = 0;
 	if(val == NULL) {
 		LM_ERR("modparam value is null\n");
 		return -1;
@@ -405,7 +407,7 @@ static int fo_add_filename(modparam_t type, void *val)
 			SHM_MEM_ERROR;
 			return -1;
 		}
-		for(int i = 0; i < FO_MAX_FILES; i++) {
+		for(i = 0; i < FO_MAX_FILES; i++) {
 			fo_file_properties_init(&fo_files[i]);
 		}
 	}

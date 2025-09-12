@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
 # This script is executed by CMake after db_berkeley and db_text schema files are generated.
 # It appends the last line of each generated file (except 'version')
@@ -24,7 +24,7 @@ for FILE in $(ls * | sort); do
             # Append the last line to the version file
             # Using "printf" to ensure a newline is added after the tail output
             tail -n "$TAIL_NUMBER" "$FILE" >> version
-            if [ ${PIPESTATUS[0]} -ne 0 ]; then # Check tail command result
+            if [ $? -ne 0 ]; then # Check tail command result
                 echo "Warning: tail command failed for $FILE"
             fi
 

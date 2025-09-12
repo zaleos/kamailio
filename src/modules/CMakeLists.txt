@@ -12,16 +12,21 @@ include(${CMAKE_SOURCE_DIR}/cmake/groups.cmake)
 set(AVAILABLE_GROUP_NAMES ${AVAILABLE_GROUPS})
 set(MODULE_GROUP_NAME
     "DEFAULT"
-    CACHE STRING "Group of modules to build (one or multiple space seperated group)"
+    CACHE STRING "Groups of modules to build (one or multiple space seperated group)"
 )
-set_property(CACHE MODULE_GROUP_NAME PROPERTY STRINGS ${AVAILABLE_GROUP_NAMES})
 
 # User may provide multiple groups seperated by space
-if(MODULE_GROUP_NAME STREQUAL "ALL_PACKAGED")
-  set(MODULE_GROUP_LIST ${MODULE_GROUP_PACKAGE_GROUPS})
-else()
-  separate_arguments(MODULE_GROUP_LIST UNIX_COMMAND "${MODULE_GROUP_NAME}")
-  message(STATUS "Building groups: ${MODULE_GROUP_LIST}")
+separate_arguments(MODULE_GROUP_LIST UNIX_COMMAND "${MODULE_GROUP_NAME}")
+
+# Deduplicate the list
+list(REMOVE_DUPLICATES MODULE_GROUP_LIST)
+list(FIND MODULE_GROUP_LIST "ALL_PACKAGED" INDEX)
+
+if(INDEX GREATER -1)
+  # Remove it from the lists
+  list(REMOVE_AT MODULE_GROUP_LIST ${INDEX})
+  list(APPEND MODULE_GROUP_LIST ${MODULE_GROUP_PACKAGE_GROUPS})
+  message(STATUS "Building all packaged modules along with other provided groups.")
 endif()
 
 # Check if elements in MODULE_GROUP_LIST are valid by checking against
@@ -40,6 +45,7 @@ foreach(group_name IN LISTS MODULE_GROUP_LIST)
     # message(STATUS "Modules: ${MODULE_GROUP}")
   endif()
 endforeach()
+message(STATUS "Building groups: ${MODULE_GROUP_LIST}")
 # message(STATUS "Expanded module groups: ${FULL_MODULE_GROUP_NAMES}")
 
 # Allow users to specify extra modules to build
@@ -120,7 +126,9 @@ function(add_module_group group_name group_modules)
         endif()
 
       else()
-        message(FATAL_ERROR "Module directory ${module_path} does not exist.")
+        message(
+          FATAL_ERROR "Module directory ${module_path} does not exist or CMakeLists.txt is missing."
+        )
       endif()
     endif()
   endforeach()
@@ -151,6 +159,7 @@ message(STATUS "Excluded modules (exlcude even if in included modules):
 foreach(group IN LISTS FULL_MODULE_GROUP_NAMES)
   get_property(MODULES_IN_GROUP VARIABLE PROPERTY "${group}")
   if(VERBOSE)
+    list(SORT MODULES_IN_GROUP)
     message(STATUS "Modules in ${group}: ${MODULES_IN_GROUP}")
   endif()
   # remove module_group_prefix.
@@ -160,10 +169,13 @@ foreach(group IN LISTS FULL_MODULE_GROUP_NAMES)
   # message(WARNING "Adding module group: ${group_name}")
   add_module_group("${group_name}" "${MODULES_IN_GROUP}")
 endforeach()
-# Empty name to add user specified modules otherwise function will error
-add_module_group(" " "${USER_MODULES_LIST}")
+
+# Function need first argument to be a string (empty string is fine)
+# Name of group_name (cmake component name) to add user specified modules
+add_module_group("user_specified_list" "${USER_MODULES_LIST}")
 
 get_property(ADDED_MODULES_LIST GLOBAL PROPERTY ADDED_MODULES_LIST)
+list(SORT ADDED_MODULES_LIST)
 message(STATUS "Modules to be built: ${ADDED_MODULES_LIST}")
 # TODO: Comment is not showing. probably a bug in CMAKE
 # https://gitlab.kitware.com/cmake/cmake/-/issues/26571
@@ -173,6 +185,22 @@ if(NOT ADDED_MODULES_LIST)
 else()
   add_dependencies(modules ${ADDED_MODULES_LIST})
 endif()
+
+add_custom_target(
+  print-modules
+  COMMAND ${CMAKE_COMMAND} -E echo
+          "----------------------------------------------------------------"
+  COMMAND ${CMAKE_COMMAND} -E echo "Module Selection Summary:"
+  COMMAND ${CMAKE_COMMAND} -E echo
+          "----------------------------------------------------------------"
+  COMMAND ${CMAKE_COMMAND} -E cmake_echo_color --green
+          "The following modules were chosen to be included:${INCLUDE_MODULES_LIST}"
+  COMMAND ${CMAKE_COMMAND} -E cmake_echo_color --red
+          "The following modules will be excluded: ${EXCLUDED_MODULES_LIST}"
+  COMMAND ${CMAKE_COMMAND} -E echo "The following modules will be built: ${ADDED_MODULES_LIST}"
+  VERBATIM
+)
+
 get_property(ALL_MODULE_DOC_TARGETS GLOBAL PROPERTY ALL_MODULE_DOC_TARGETS)
 # message(STATUS "ALL_MODULE_DOC_TARGETS: ${ALL_MODULE_DOC_TARGETS}")
 

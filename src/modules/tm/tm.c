@@ -137,6 +137,8 @@ static int w_t_relay_to_sctp_uri(struct sip_msg *, char *, char *);
 #endif
 static int w_t_relay_to_avp(struct sip_msg *msg, char *str, char *);
 static int w_t_relay_to(struct sip_msg *msg, char *str, char *);
+static int w_t_relay_to_proxy(sip_msg_t *msg, char *paddr, char *p2);
+static int w_t_relay_to_proxy_flags(sip_msg_t *msg, char *paddr, char *pflags);
 static int w_t_replicate_uri(struct sip_msg *p_msg,
 		char *uri, /* sip uri as string or variable */
 		char *_foo /* nothing expected */);
@@ -325,6 +327,10 @@ static cmd_export_t cmds[] = {
 			REQUEST_ROUTE | FAILURE_ROUTE},
 	{"t_relay_to", w_t_relay_to, 2, fixup_t_relay_to, 0,
 			REQUEST_ROUTE | FAILURE_ROUTE},
+	{"t_relay_to_proxy", w_t_relay_to_proxy, 1, fixup_spve_null,
+			fixup_free_spve_null, REQUEST_ROUTE | FAILURE_ROUTE},
+	{"t_relay_to_proxy", w_t_relay_to_proxy_flags, 1, fixup_spve_igp,
+			fixup_free_spve_igp, REQUEST_ROUTE | FAILURE_ROUTE},
 	{"t_forward_nonack", w_t_forward_nonack, 2, fixup_hostport2proxy, 0,
 			REQUEST_ROUTE},
 	{"t_forward_nonack_uri", w_t_forward_nonack_uri, 0, 0, 0,
@@ -771,6 +777,12 @@ static int mod_init(void)
 	if(tm_exec_time_check_param > 0) {
 		tm_exec_time_check = (unsigned long)tm_exec_time_check_param * 1000;
 	}
+
+	/* Check if evlreq_mode is set to correct range	*/
+	if(_tm_evlreq_mode < 0 || _tm_evlreq_mode > TM_EVLREQ_BOTH_HBH) {
+		LM_ERR("evlreq_mode tm modparam must be in [0,%d]", TM_EVLREQ_BOTH_HBH);
+		return -1;
+	};
 
 	/* checking if we have sufficient bitmap capacity for given
 	 * maximum number of  branches */
@@ -2899,10 +2911,23 @@ static const char *rpc_t_uac_start_doc[2] = {
 	0
 };
 
+static const char *rpc_t_uac_start_hex_doc[2] = {
+	"starts a tm uac using  a list of string parameters: method, ruri, "
+	"dst_uri, send_sock, headers (CRLF separated) and hexa body (optional)",
+	0
+};
+
 static const char *rpc_t_uac_wait_doc[2] = {
 	"starts a tm uac and waits for the final reply, using a list of string "
 	"parameters: method, ruri, dst_uri send_sock, headers (CRLF separated)"
 	" and body (optional)",
+	0
+};
+
+static const char *rpc_t_uac_wait_hex_doc[2] = {
+	"starts a tm uac and waits for the final reply, using a list of string "
+	"parameters: method, ruri, dst_uri send_sock, headers (CRLF separated)"
+	" and hexa body (optional)",
 	0
 };
 
@@ -2913,9 +2938,23 @@ static const char *rpc_t_uac_wait_block_doc[2] = {
 	0
 };
 
+static const char *rpc_t_uac_wait_block_hex_doc[2] = {
+	"starts a tm uac and waits for the final reply in blocking mode, using a"
+	" list of string parameters: method, ruri, dst_uri send_sock, headers"
+	" (CRLF separated) and hexa body (optional)",
+	0
+};
+
 static const char *rpc_t_uac_start_noack_doc[2] = {
 	"starts a tm uac using a list of string parameters: method, ruri, "
 	"dst_uri, send_sock, headers (CRLF separated) and body (optional), "
+	"without sending ACK for local INVITE",
+	0
+};
+
+static const char *rpc_t_uac_start_noack_hex_doc[2] = {
+	"starts a tm uac using a list of string parameters: method, ruri, "
+	"dst_uri, send_sock, headers (CRLF separated) and hexa body (optional), "
 	"without sending ACK for local INVITE",
 	0
 };
@@ -2927,10 +2966,30 @@ static const char *rpc_t_uac_wait_noack_doc[2] = {
 	0
 };
 
+static const char *rpc_t_uac_wait_noack_hex_doc[2] = {
+	"starts a tm uac and waits for the final reply, using a list of string "
+	"parameters: method, ruri, dst_uri send_sock, headers (CRLF separated)"
+	" and hexa body (optional), without sending ACK for local INVITE",
+	0
+};
+
 static const char *rpc_t_uac_wait_block_noack_doc[2] = {
 	"starts a tm uac and waits for the final reply in blocking mode, using a"
 	" list of string parameters: method, ruri, dst_uri send_sock, headers "
 	"(CRLF separated) and body (optional), without sending ACK for local INVITE",
+	0
+};
+
+static const char *rpc_t_uac_wait_block_noack_hex_doc[2] = {
+	"starts a tm uac and waits for the final reply in blocking mode, using a"
+	" list of string parameters: method, ruri, dst_uri send_sock, headers "
+	"(CRLF separated) and hexa body (optional), without sending ACK for local INVITE",
+	0
+};
+
+static const char *rpc_t_uac_attrs_doc[2] = {
+	"starts a tm uac using a list of string parameters: attributes, method,"
+	" ruri, dst_uri, send_sock, headers (CRLF separated) and body (optional)",
 	0
 };
 
@@ -2955,15 +3014,32 @@ static rpc_export_t tm_rpc[] = {
 	{"tm.reply_callid", rpc_reply_callid, rpc_reply_callid_doc, 0},
 	{"tm.stats", tm_rpc_stats, tm_rpc_stats_doc, 0},
 	{"tm.hash_stats", tm_rpc_hash_stats, tm_rpc_hash_stats_doc, 0},
-	{"tm.t_uac_start", rpc_t_uac_start, rpc_t_uac_start_doc, 0},
-	{"tm.t_uac_wait", rpc_t_uac_wait, rpc_t_uac_wait_doc, RET_ARRAY},
-	{"tm.t_uac_wait_block", rpc_t_uac_wait_block, rpc_t_uac_wait_block_doc, 0},
+	{"tm.t_uac_start", rpc_t_uac_start,
+		rpc_t_uac_start_doc, 0},
+	{"tm.t_uac_start_hex", rpc_t_uac_start_hex,
+		rpc_t_uac_start_hex_doc, 0},
+	{"tm.t_uac_wait", rpc_t_uac_wait,
+		rpc_t_uac_wait_doc, RET_ARRAY},
+	{"tm.t_uac_wait_hex", rpc_t_uac_wait_hex,
+		rpc_t_uac_wait_hex_doc, RET_ARRAY},
+	{"tm.t_uac_wait_block", rpc_t_uac_wait_block,
+		rpc_t_uac_wait_block_doc, 0},
+	{"tm.t_uac_wait_block_hex", rpc_t_uac_wait_block_hex,
+		rpc_t_uac_wait_block_hex_doc, 0},
 	{"tm.t_uac_start_noack", rpc_t_uac_start_noack,
 		rpc_t_uac_start_noack_doc, 0},
+	{"tm.t_uac_start_noack_hex", rpc_t_uac_start_noack_hex,
+		rpc_t_uac_start_noack_hex_doc, 0},
 	{"tm.t_uac_wait_noack", rpc_t_uac_wait_noack,
 		rpc_t_uac_wait_noack_doc, RET_ARRAY},
+	{"tm.t_uac_wait_noack_hex", rpc_t_uac_wait_noack_hex,
+		rpc_t_uac_wait_noack_hex_doc, RET_ARRAY},
 	{"tm.t_uac_wait_block_noack", rpc_t_uac_wait_block_noack,
 		rpc_t_uac_wait_block_noack_doc, 0},
+	{"tm.t_uac_wait_block_noack_hex", rpc_t_uac_wait_block_noack_hex,
+		rpc_t_uac_wait_block_noack_hex_doc, 0},
+	{"tm.t_uac_attrs", rpc_t_uac_attrs,
+		rpc_t_uac_attrs_doc, RET_ARRAY},
 	{"tm.list", tm_rpc_list, tm_rpc_list_doc, RET_ARRAY},
 	{"tm.clean", tm_rpc_clean, tm_rpc_clean_doc, 0},
 	{0, 0, 0, 0}
@@ -3199,6 +3275,41 @@ static int ki_t_relay_to_proxy_flags(sip_msg_t *msg, str *sproxy, int rflags)
 static int ki_t_relay_to_proxy(sip_msg_t *msg, str *sproxy)
 {
 	return ki_t_relay_to_proxy_flags(msg, sproxy, 0);
+}
+
+/**
+ *
+ */
+static int w_t_relay_to_proxy(sip_msg_t *msg, char *paddr, char *bar)
+{
+	str addr = STR_NULL;
+
+	if(fixup_get_svalue(msg, (gparam_t *)paddr, &addr) != 0) {
+		LM_ERR("invalid proxy address parameter\n");
+		return -1;
+	}
+
+	return ki_t_relay_to_proxy_flags(msg, &addr, 0);
+}
+
+/**
+ *
+ */
+static int w_t_relay_to_proxy_flags(sip_msg_t *msg, char *paddr, char *pflags)
+{
+	str addr = STR_NULL;
+	int flags = 0;
+
+	if(fixup_get_svalue(msg, (gparam_t *)paddr, &addr) != 0) {
+		LM_ERR("invalid proxy address parameter\n");
+		return -1;
+	}
+	if(fixup_get_ivalue(msg, (gparam_t *)pflags, &flags) != 0) {
+		LM_ERR("invalid flags parameter\n");
+		return -1;
+	}
+
+	return ki_t_relay_to_proxy_flags(msg, &addr, flags);
 }
 
 /**

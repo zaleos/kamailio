@@ -304,7 +304,7 @@ Joey Golan
    1.98. rtpengine_query usage
    1.99. rtpengine_query_v usage
    1.100. rtpengine_manage usage
-   1.101. rtpengine_off usage
+   1.101. rtpengine_subscribe_request usage
    1.102. rtpengine_subscribe_answer usage
    1.103. rtpengine_unsubscribe usage
    1.104. start_recording usage
@@ -2885,7 +2885,7 @@ rtpengine_subscribe_request(flags,sdp_avp,to_tag_avp,stream_xavp[,via-branch]
 
    This function can be used from ANY_ROUTE.
 
-   Example 1.101. rtpengine_off usage
+   Example 1.101. rtpengine_subscribe_request usage
 route {
 ...
     if (is_method("INVITE")) {

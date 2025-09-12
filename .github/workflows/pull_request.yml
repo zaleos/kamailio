@@ -13,7 +13,7 @@ jobs:
       contents: read # to fetch code (actions/checkout)
     steps:
       - name: Check out the repository to the runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Run clang-format check
         uses: wolletd/clang-format-checker@v1.12
         with:
@@ -24,7 +24,7 @@ jobs:
       contents: read # to fetch code (actions/checkout)
     steps:
       - name: Check out scripts folder to the runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: master
           path: actions
@@ -32,11 +32,11 @@ jobs:
             .github/scripts/check-cmake-format.sh
           sparse-checkout-cone-mode: false
       - name: Check out the repository to the runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: source
           ref: ${{ github.event.pull_request.head.sha }}
-      - uses: awalsh128/cache-apt-pkgs-action@v1.5.0
+      - uses: awalsh128/cache-apt-pkgs-action@v1.5.3
         with:
           packages: cmake-format
       - name: Run scripts/check-cmake-format.sh
@@ -51,7 +51,7 @@ jobs:
       contents: read # to fetch code (actions/checkout)
     steps:
       - name: Check out scripts folder to the runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: master
           path: actions
@@ -59,7 +59,7 @@ jobs:
             .github/scripts/check-commit.sh
           sparse-checkout-cone-mode: false
       - name: Check out the repository to the runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: source
           ref: ${{ github.event.pull_request.head.sha }}
@@ -86,13 +86,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - distribution: bookworm
+          - distribution: trixie
             compilier: gcc
-          - distribution: bookworm
+          - distribution: trixie
             compilier: clang
     steps:
       - name: Check out the repository to the runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - uses: ammaraskar/gcc-problem-matcher@0.3.0
       - name: build
         run: |
